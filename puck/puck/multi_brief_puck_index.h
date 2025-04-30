@@ -96,8 +96,8 @@ private:
     std::unique_ptr<int32_t[]> _briefs_indptr;
     std::unique_ptr<int32_t[]> _briefs_indices;
     //标记coase下样本与的brief信息
-//    std::unique_ptr<bool[]> _briefs_coarse;
-    std::vector<uint64_t*> _briefs_coarse_bitmask; // 使用uint64_t数组存储位图
+    std::unique_ptr<bool[]> _briefs_coarse;
+    //std::vector<uint64_t*> _briefs_coarse_bitmask; // 使用uint64_t数组存储位图
     //每个brief下，样本在的cell ids
     std::unique_ptr<int32_t[]> _briefs_cell_indptr;
     std::unique_ptr<int32_t[]> _briefs_cell_indices;
