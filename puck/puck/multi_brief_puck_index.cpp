@@ -223,7 +223,7 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
 
     SearchCellData& search_cell_data = context->get_search_cell_data();
     float* cluster_inner_product = search_cell_data.cluster_inner_product;
-    auto start_coarse_calculation = high_resolution_clock::now();
+    auto start_coarse_calculation = std::chrono::high_resolution_clock::now();
     matrix_multiplication(
             _coarse_vocab,
             feature,
@@ -233,7 +233,7 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
             "TN",
             cluster_inner_product);
 
-    auto end_coarse_calculation = high_resolution_clock::now();
+    auto end_coarse_calculation = std::chrono::high_resolution_clock::now();
 
     //计算一级聚类中心的距离,使用最大堆
     float* coarse_distance = search_cell_data.coarse_distance;
@@ -265,7 +265,7 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
     const uint32_t num_blocks = (_conf.coarse_cluster_count + bits_per_block - 1) / bits_per_block;
 
     using namespace std::chrono;
-    auto start_bitmap = high_resolution_clock::now();
+    auto start_bitmap = std::chrono::high_resolution_clock::now();
 
     // 合并多Brief条件的位图（按位与）
     uint64_t* combined_bitmask = new uint64_t[num_blocks];
@@ -277,7 +277,7 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
             combined_bitmask[block] &= current_bitmask[block];
         }
     }
-    auto end_bitmap_merge = high_resolution_clock::now();
+    auto end_bitmap_merge = std::chrono::high_resolution_clock::now();
 
     // 遍历位图中的有效粗聚类
     for (uint32_t block = 0; block < num_blocks; ++block) {
@@ -301,7 +301,7 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
         }
     }
 
-    auto end_bitmap_traversal = high_resolution_clock::now();
+    auto end_bitmap_traversal = std::chrono::high_resolution_clock::now();
     delete[] combined_bitmask; // 释放临时位图
 
     auto merge_time = duration_cast<microseconds>(end_bitmap_merge - start_bitmap).count();
