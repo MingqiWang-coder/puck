@@ -178,7 +178,7 @@ int PySearcher::search(uint32_t n, const float* query_fea, const uint32_t topk, 
         response.local_idx = labels + id * topk;
         _index->search(&request, &response);
     });
-
+    _index->log_perf_stats();
     return 0;
 }
 int PySearcher::filter_search(uint32_t n, const float* query_fea, const uint32_t topk, float* distances,
@@ -199,6 +199,7 @@ int PySearcher::filter_search(uint32_t n, const float* query_fea, const uint32_t
         response.local_idx = labels + cur_id * topk;
         _index->search(&request, &response);
     });
+    _index->log_perf_stats();
     return 0;
 }
 PySearcher::~PySearcher() {};

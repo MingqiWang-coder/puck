@@ -10,6 +10,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <atomic>
 
 #include <mutex>
 #include <fstream>
@@ -23,6 +24,7 @@ class MultiBriefPuckIndex : public puck::PuckIndex {
 public:
     MultiBriefPuckIndex();
     ~MultiBriefPuckIndex();
+    void log_perf_stats();
     /*
      * @brief 检索最近的topk个样本
      * @@param [in] request : request
@@ -30,6 +32,7 @@ public:
      * @@return (int) : 正常返回0，错误返回值<0
      **/
     virtual int search(const Request* request, Response* response) override;
+    PerfStats _perf_stats; // 性能统计
 private:
     ////训练建库
     /*
@@ -74,7 +77,8 @@ private:
     std::unique_ptr<int32_t[]> _briefs_indptr;
     std::unique_ptr<int32_t[]> _briefs_indices;
     //标记coase下样本与的brief信息
-    std::unique_ptr<bool[]> _briefs_coarse;
+//    std::unique_ptr<bool[]> _briefs_coarse;
+    std::vector<uint64_t*> _briefs_coarse_bitmask; // 使用uint64_t数组存储位图
     //每个brief下，样本在的cell ids
     std::unique_ptr<int32_t[]> _briefs_cell_indptr;
     std::unique_ptr<int32_t[]> _briefs_cell_indices;
@@ -145,6 +149,16 @@ struct BriefRequest : public  Request {
         briefs = nullptr;
         brief_size = 0;
     }
+};
+
+struct PerfStats {
+    std::atomic<uint64_t> total_searches{0};              // 总查询次数
+    std::atomic<uint64_t> bitmap_merge_time_us{0};        // 位图合并总耗时（微秒）
+    std::atomic<uint64_t> bitmap_traversal_time_us{0};    // 位图遍历总耗时
+    std::atomic<uint64_t> total_bitmap_time_us{0};        // 位图操作总耗时（合并+遍历）
+
+    // 新增：粗聚类阶段其他耗时（用于对比优化收益）
+    std::atomic<uint64_t> coarse_other_time_us{0};
 };
 
 } // namespace puck
