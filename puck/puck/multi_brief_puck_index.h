@@ -19,6 +19,16 @@
 
 namespace puck {
 
+struct PerfStats {
+    std::atomic<uint64_t> total_searches{0};              // 总查询次数
+    std::atomic<uint64_t> bitmap_merge_time_us{0};        // 位图合并总耗时（微秒）
+    std::atomic<uint64_t> bitmap_traversal_time_us{0};    // 位图遍历总耗时
+    std::atomic<uint64_t> total_bitmap_time_us{0};        // 位图操作总耗时（合并+遍历）
+
+    // 新增：粗聚类阶段其他耗时（用于对比优化收益）
+    std::atomic<uint64_t> coarse_other_time_us{0};
+};
+
 //内存索引结构
 class MultiBriefPuckIndex : public puck::PuckIndex {
 public:
@@ -149,16 +159,6 @@ struct BriefRequest : public  Request {
         briefs = nullptr;
         brief_size = 0;
     }
-};
-
-struct PerfStats {
-    std::atomic<uint64_t> total_searches{0};              // 总查询次数
-    std::atomic<uint64_t> bitmap_merge_time_us{0};        // 位图合并总耗时（微秒）
-    std::atomic<uint64_t> bitmap_traversal_time_us{0};    // 位图遍历总耗时
-    std::atomic<uint64_t> total_bitmap_time_us{0};        // 位图操作总耗时（合并+遍历）
-
-    // 新增：粗聚类阶段其他耗时（用于对比优化收益）
-    std::atomic<uint64_t> coarse_other_time_us{0};
 };
 
 } // namespace puck
