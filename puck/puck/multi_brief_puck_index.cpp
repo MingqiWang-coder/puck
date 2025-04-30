@@ -159,39 +159,39 @@ int MultiBriefPuckIndex::convert_local_to_memory_idx(
            cell_point_indices.data(),
            sizeof(cell_point_indices[0]) * cell_point_indices.size());
 
-//    _briefs_coarse.reset(new bool[brief_count * _conf.coarse_cluster_count]);
-//    memset(_briefs_coarse.get(), 0, sizeof(bool) * brief_count * _conf.coarse_cluster_count);
-//
-//    for (size_t j = 0; j < _conf.total_point_count; ++j) {
-//        int coarse_id = cell_assign[j] / _conf.fine_cluster_count;
-//
-//        for (size_t i = _briefs_indptr[j]; i < _briefs_indptr[j + 1]; ++i) {
-//            int brief_id = _briefs_indices[i];
-//            _briefs_coarse[brief_id * _conf.coarse_cluster_count + coarse_id] = true;
-//        }
-//    }
+    _briefs_coarse.reset(new bool[brief_count * _conf.coarse_cluster_count]);
+    memset(_briefs_coarse.get(), 0, sizeof(bool) * brief_count * _conf.coarse_cluster_count);
 
-    const uint32_t bits_per_block = 64;
-    const uint32_t num_blocks = (_conf.coarse_cluster_count + bits_per_block - 1) / bits_per_block;
-    _briefs_coarse_bitmask.resize(brief_count);
-
-    // 初始化位图内存
-    for (uint32_t brief_id = 0; brief_id < brief_count; ++brief_id) {
-        _briefs_coarse_bitmask[brief_id] = new uint64_t[num_blocks];
-        memset(_briefs_coarse_bitmask[brief_id], 0, sizeof(uint64_t) * num_blocks);
-    }
-
-    // 填充位图
     for (size_t j = 0; j < _conf.total_point_count; ++j) {
         int coarse_id = cell_assign[j] / _conf.fine_cluster_count;
+
         for (size_t i = _briefs_indptr[j]; i < _briefs_indptr[j + 1]; ++i) {
             int brief_id = _briefs_indices[i];
-            // 设置对应的位
-            const uint32_t block_idx = coarse_id / bits_per_block;
-            const uint32_t bit_offset = coarse_id % bits_per_block;
-            _briefs_coarse_bitmask[brief_id][block_idx] |= (1ULL << bit_offset);
+            _briefs_coarse[brief_id * _conf.coarse_cluster_count + coarse_id] = true;
         }
     }
+
+//    const uint32_t bits_per_block = 64;
+//    const uint32_t num_blocks = (_conf.coarse_cluster_count + bits_per_block - 1) / bits_per_block;
+//    _briefs_coarse_bitmask.resize(brief_count);
+//
+//    // 初始化位图内存
+//    for (uint32_t brief_id = 0; brief_id < brief_count; ++brief_id) {
+//        _briefs_coarse_bitmask[brief_id] = new uint64_t[num_blocks];
+//        memset(_briefs_coarse_bitmask[brief_id], 0, sizeof(uint64_t) * num_blocks);
+//    }
+//
+//    // 填充位图
+//    for (size_t j = 0; j < _conf.total_point_count; ++j) {
+//        int coarse_id = cell_assign[j] / _conf.fine_cluster_count;
+//        for (size_t i = _briefs_indptr[j]; i < _briefs_indptr[j + 1]; ++i) {
+//            int brief_id = _briefs_indices[i];
+//            // 设置对应的位
+//            const uint32_t block_idx = coarse_id / bits_per_block;
+//            const uint32_t bit_offset = coarse_id % bits_per_block;
+//            _briefs_coarse_bitmask[brief_id][block_idx] |= (1ULL << bit_offset);
+//        }
+//    }
 
     int pre_memory_id = -1;
 
@@ -220,11 +220,14 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
         const float* feature,
         const uint32_t top_coarse_cnt,
         uint32_t& true_top_coarse) {
+    using namespace std::chrono;
     const BriefRequest* request = dynamic_cast<const BriefRequest*>(context->get_request());
 
+    //============ 1. 矩阵乘法耗时统计 ============
     SearchCellData& search_cell_data = context->get_search_cell_data();
     float* cluster_inner_product = search_cell_data.cluster_inner_product;
-    auto start_coarse_calculation = std::chrono::high_resolution_clock::now();
+
+    auto start_matrix = high_resolution_clock::now(); // 开始计时
     matrix_multiplication(
             _coarse_vocab,
             feature,
@@ -233,92 +236,47 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
             _conf.feature_dim,
             "TN",
             cluster_inner_product);
+    auto end_matrix = high_resolution_clock::now();
+    // 累加到粗聚类阶段其他耗时
+    _perf_stats.coarse_other_time_us.fetch_add(
+        duration_cast<microseconds>(end_matrix - start_matrix).count(),
+        std::memory_order_relaxed
+    );
 
-    auto end_coarse_calculation = std::chrono::high_resolution_clock::now();
-
-    //计算一级聚类中心的距离,使用最大堆
+    //============ 2. 粗聚类筛选耗时统计 ============
     float* coarse_distance = search_cell_data.coarse_distance;
     uint32_t* coarse_tag = search_cell_data.coarse_tag;
-    //初始化最大堆。
     MaxHeap max_heap(top_coarse_cnt, coarse_distance, coarse_tag);
 
-//    for (uint32_t c = 0; c < _conf.coarse_cluster_count; ++c) {
-//        if (!_briefs_coarse[request->briefs[0] * _conf.coarse_cluster_count + c]) {
-//            // LOG(INFO)<<request->briefs[0]<<" "<<c<<" skip";
-//            continue;
-//        }
-//
-//        if (request->brief_size == 2 &&
-//            !_briefs_coarse[request->briefs[1] * _conf.coarse_cluster_count + c]) {
-//            // LOG(INFO)<<request->briefs[0]<<" "<<c<<" skip";
-//            continue;
-//        }
-//
-//        float temp_dist = _coarse_norms[c] - cluster_inner_product[c];
-//
-//        if (temp_dist < coarse_distance[0]) {
-//            max_heap.max_heap_update(temp_dist, c);
-//        }
-//    }
+    auto start_filter = high_resolution_clock::now(); // 开始计时
+    for (uint32_t c = 0; c < _conf.coarse_cluster_count; ++c) {
+        // ---------- 位图条件检查（当前为布尔数组，未来可优化为位图） ----------
+        if (!_briefs_coarse[request->briefs[0] * _conf.coarse_cluster_count + c]) {
+            continue;
+        }
 
-    // 修改后（位图遍历）
-    const uint32_t bits_per_block = 64;
-    const uint32_t num_blocks = (_conf.coarse_cluster_count + bits_per_block - 1) / bits_per_block;
+        if (request->brief_size == 2 &&
+            !_briefs_coarse[request->briefs[1] * _conf.coarse_cluster_count + c]) {
+            continue;
+        }
 
-    using namespace std::chrono;
-    auto start_bitmap = std::chrono::high_resolution_clock::now();
-
-    // 合并多Brief条件的位图（按位与）
-    uint64_t* combined_bitmask = new uint64_t[num_blocks];
-    memcpy(combined_bitmask, _briefs_coarse_bitmask[request->briefs[0]], sizeof(uint64_t) * num_blocks);
-
-    for (int i = 1; i < request->brief_size; ++i) {
-        const uint64_t* current_bitmask = _briefs_coarse_bitmask[request->briefs[i]];
-        for (uint32_t block = 0; block < num_blocks; ++block) {
-            combined_bitmask[block] &= current_bitmask[block];
+        // ---------- 距离计算与堆更新 ----------
+        float temp_dist = _coarse_norms[c] - cluster_inner_product[c];
+        if (temp_dist < coarse_distance[0]) {
+            max_heap.max_heap_update(temp_dist, c);
         }
     }
-    auto end_bitmap_merge = std::chrono::high_resolution_clock::now();
+    auto end_filter = high_resolution_clock::now();
+    // 累加到位图遍历耗时（即使当前未优化为位图）
+    _perf_stats.bitmap_traversal_time_us.fetch_add(
+        duration_cast<microseconds>(end_filter - start_filter).count(),
+        std::memory_order_relaxed
+    );
 
-    // 遍历位图中的有效粗聚类
-    for (uint32_t block = 0; block < num_blocks; ++block) {
-        uint64_t bits = combined_bitmask[block];
-        if (bits == 0) continue; // 跳过空块
-
-        // 遍历块内所有置位
-        uint32_t base_coarse_id = block * bits_per_block;
-        while (bits != 0) {
-            uint32_t next_set_bit = __builtin_ctzll(bits); // 获取最低有效位位置
-            uint32_t c = base_coarse_id + next_set_bit;
-            if (c >= _conf.coarse_cluster_count) break;
-
-            // 计算距离并更新堆
-            float temp_dist = _coarse_norms[c] - cluster_inner_product[c];
-            if (temp_dist < coarse_distance[0]) {
-                max_heap.max_heap_update(temp_dist, c);
-            }
-
-            bits ^= (1ULL << next_set_bit); // 清除已处理的位
-        }
-    }
-
-    auto end_bitmap_traversal = std::chrono::high_resolution_clock::now();
-    delete[] combined_bitmask; // 释放临时位图
-
-    auto merge_time = duration_cast<microseconds>(end_bitmap_merge - start_bitmap).count();
-    auto traversal_time = duration_cast<microseconds>(end_bitmap_traversal - end_bitmap_merge).count();
-    auto total_bitmap_time = merge_time + traversal_time;
-
-    // 原子操作更新统计
-    _perf_stats.bitmap_merge_time_us.fetch_add(merge_time, std::memory_order_relaxed);
-    _perf_stats.bitmap_traversal_time_us.fetch_add(traversal_time, std::memory_order_relaxed);
-    _perf_stats.total_bitmap_time_us.fetch_add(total_bitmap_time, std::memory_order_relaxed);
-    auto coarse_calculation_time = duration_cast<microseconds>(end_coarse_calculation - start_coarse_calculation).count();
-    _perf_stats.coarse_other_time_us.fetch_add(coarse_calculation_time, std::memory_order_relaxed);
+    //============ 3. 更新总查询次数 ============
     _perf_stats.total_searches.fetch_add(1, std::memory_order_relaxed);
 
     true_top_coarse = max_heap.get_heap_size();
-    //堆排序
     max_heap.reorder();
     return 0;
 }
