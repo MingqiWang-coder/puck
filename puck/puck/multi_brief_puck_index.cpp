@@ -18,11 +18,7 @@ MultiBriefPuckIndex::MultiBriefPuckIndex() {
     _conf.index_type = IndexType::MULTI_BRIEF_PUCK_INDEX;
 }
 
-MultiBriefPuckIndex::~MultiBriefPuckIndex() {
-    for (auto ptr : _briefs_coarse_bitmask) {
-        delete[] ptr;
-    }
-}
+MultiBriefPuckIndex::~MultiBriefPuckIndex() {}
 
 void MultiBriefPuckIndex::log_perf_stats() {
     uint64_t total_searches = _perf_stats.total_searches.load(std::memory_order_relaxed);
