@@ -31,6 +31,7 @@ class Index {
 public:
     Index() {}
     virtual ~Index() {}
+    virtual void log_perf_stats() {} // 基类提供默认空实现
     /*
     * @brief 根据配置文件修改conf、初始化内存、加载索引文件
     * @@return (int) : 正常返回0，错误返回值<0

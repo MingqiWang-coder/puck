@@ -34,7 +34,7 @@ class MultiBriefPuckIndex : public puck::PuckIndex {
 public:
     MultiBriefPuckIndex();
     ~MultiBriefPuckIndex();
-    void log_perf_stats();
+    void log_perf_stats() override;
     /*
      * @brief 检索最近的topk个样本
      * @@param [in] request : request
