@@ -43,6 +43,7 @@ void MultiBriefPuckIndex::log_perf_stats() {
     LOG(INFO) << "[PerfStats] Avg Bitmap Traversal Time: " << avg_traversal << " μs";
     LOG(INFO) << "[PerfStats] Avg Total Bitmap Time: " << avg_total_bitmap << " μs";
     LOG(INFO) << "[PerfStats] Avg Coarse Calculation Time (Matrix etc.): " << avg_coarse_other << " μs";
+    _perf_stats = PerfStats();
 }
 
 int MultiBriefPuckIndex::check_index_type() {
