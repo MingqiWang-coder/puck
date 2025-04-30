@@ -28,12 +28,13 @@ struct PerfStats {
     // 新增：粗聚类阶段其他耗时（用于对比优化收益）
     std::atomic<uint64_t> coarse_other_time_us{0};
 
-    PerfStats() {
-        total_searches.store(0);
-        bitmap_merge_time_us.store(0);
-        bitmap_traversal_time_us.store(0);
-        total_bitmap_time_us.store(0);
-        coarse_other_time_us.store(0);
+    PerfStats& operator=(const PerfStats& other) {
+        total_searches.store(other.total_searches.load());
+        bitmap_merge_time_us.store(other.bitmap_merge_time_us.load());
+        bitmap_traversal_time_us.store(other.bitmap_traversal_time_us.load());
+        total_bitmap_time_us.store(other.total_bitmap_time_us.load());
+        coarse_other_time_us.store(other.coarse_other_time_us.load());
+        return *this;
     }
 };
 
