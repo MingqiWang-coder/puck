@@ -233,7 +233,8 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
             "TN",
             cluster_inner_product);
 
-    auto start_bitmap = high_resolution_clock::now();
+    auto end_coarse_calculation = high_resolution_clock::now();
+
     //计算一级聚类中心的距离,使用最大堆
     float* coarse_distance = search_cell_data.coarse_distance;
     uint32_t* coarse_tag = search_cell_data.coarse_tag;
