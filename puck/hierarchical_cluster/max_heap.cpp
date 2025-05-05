@@ -56,6 +56,9 @@ void MaxHeap::max_heap_update(const float new_val, const uint32_t new_tag) {
         return;
     }
 
+    // 保存旧值
+    const float old_val = _heap_val[0];
+
     //当插入元素小于_heap_size时候，从可能会影响到的那个节点开始查找插入位置
     if (_default_point_cnt > 0) {
         father_idx = _default_point_cnt--;
