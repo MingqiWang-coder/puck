@@ -529,7 +529,7 @@ int MultiBriefPuckIndex::search_nearest_filter_points(
                     context, cell_point_start[cell_id], temp_dist, filter_heap);
 
             if (updated_cnt > 0) {
-              pivot = (filter_heap.get_top_addr()[0] - query_norm) / dynamic_radius_rate / 2.0;
+              pivot = (filter_heap.get_top_addr()[0] - query_norm) / (2.0 * dynamic_rate);
                 //pivot = (filter_heap.get_top_addr()[0] - query_norm) / _conf.radius_rate / 2.0;
             }
 
