@@ -62,6 +62,11 @@ void MaxHeap::max_heap_update(const float new_val, const uint32_t new_tag) {
     }
 
     insert(_heap_size, father_idx, new_val, new_tag);
+
+    // 触发回调（如果注册过）
+    if (_callback) {
+        _callback(old_val, new_val);
+    }
 }
 
 void MaxHeap::insert(uint32_t heap_size, uint32_t father_idx, float new_val, uint32_t new_tag) {

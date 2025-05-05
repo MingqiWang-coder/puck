@@ -91,6 +91,9 @@ private:
 
     int compute_quantized_distance(SearchContext* context, const int cell_point_idx,
                                    const float cell_dist, MaxHeap& result_heap);
+
+    float compute_dynamic_radius_rate(SearchContext* context);
+
 private:
     //memory idx order，point has brief ids
     std::unique_ptr<int32_t[]> _briefs_indptr;

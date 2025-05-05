@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <glog/logging.h>
 #include "puck/search_context.h"
+#include "puck/hierarchical_cluster/max_heap.h"
 //#define _aligned_malloc(size, alignment) aligned_alloc(alignment, size)
 
 namespace puck {
@@ -179,7 +180,20 @@ int SearchContext::reset(const IndexConf& conf) {
 
     _inited = true;
 
+    // ============= 初始化动态阈值字段 =============
+    _sum_dist = 0.0f;
+    _sum_sq_dist = 0.0f;
+    _update_count = 0;
+    _current_radius_rate = conf.base_radius_rate; // 从配置获取基础值
+    _last_update_time = std::chrono::high_resolution_clock::now();
+
     return 0;
+}
+
+void SearchContext::attach_heap_callback(MaxHeap& heap) {
+    heap.set_update_callback([this](float old_val, float new_val) {
+        this->update_statistics(old_val, new_val); // 线程安全更新
+    });
 }
 
 }  // namespace puck

@@ -71,6 +71,16 @@ struct IndexConf {
     //tinker的检索参数
     uint32_t tinker_search_range;
 
+
+    // 动态更新阈值
+    float base_radius_rate = 1.0;  // 基础阈值参数
+    float alpha = 0.5;             // 标准差权重系数
+    float beta = 1.0;              // 频率敏感系数
+    float gamma = 1e-5;            // 频率平滑因子
+    int min_updates_for_dynamic = 50; // 启动动态调整的最小更新次数
+    float max_rate_change = 0.1;   // 单次最大变化率（10%）
+
+
     IndexConf();
 
     /*

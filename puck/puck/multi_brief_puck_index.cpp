@@ -215,6 +215,45 @@ int MultiBriefPuckIndex::convert_local_to_memory_idx(
     return 0;
 }
 
+float MultiBriefPuckIndex::compute_dynamic_radius_rate(SearchContext* context) {
+    const auto& conf = _conf;
+
+    // [MODIFY] 线程安全获取统计量
+    auto stats = context->get_thread_safe_stats();
+
+    // 冷启动阶段使用基础参数
+    if (stats.update_count < conf.min_updates_for_dynamic) {
+        return conf.base_radius_rate;
+    }
+
+    // 计算统计量
+    const float μ = stats.sum_dist / stats.update_count;
+    const float σ = std::sqrt(
+        std::abs(stats.sum_sq_dist / stats.update_count - μ * μ)
+    );
+
+    // 计算更新频率（每秒更新次数）
+    const auto now = std::chrono::high_resolution_clock::now();
+    const float elapsed_sec =
+        std::chrono::duration<float>(now - stats.last_update_time).count();
+    const float freq = stats.update_count / (elapsed_sec + conf.gamma);
+
+    // 混合策略公式
+    float dynamic_rate = conf.base_radius_rate *
+        (1.0f + conf.alpha * σ / μ + conf.beta / (freq + conf.gamma));
+
+    // 限制单次变化幅度
+    const float prev_rate = context->get_current_radius_rate();
+    const float max_change = prev_rate * conf.max_rate_change;
+    dynamic_rate = std::clamp(
+        dynamic_rate,
+        prev_rate - max_change,
+        prev_rate + max_change
+    );
+
+    return dynamic_rate;
+}
+
 int MultiBriefPuckIndex::search_nearest_coarse_cluster(
         SearchContext* context,
         const float* feature,
@@ -347,14 +386,18 @@ int MultiBriefPuckIndex::search_nearest_filter_points(
     float* coarse_distance = search_cell_data.coarse_distance;
     uint32_t* coarse_tag = search_cell_data.coarse_tag;
     //过滤阈值
-    float pivot = coarse_distance[true_coarse_cnt - 1];
+	float query_norm = cblas_sdot(_conf.feature_dim, feature, 1, feature, 1);
 
     //堆结构
     float* result_distance = context->get_search_point_data().result_distance;
     uint32_t* result_tag = context->get_search_point_data().result_tag;
     MaxHeap filter_heap(_conf.filter_topk, result_distance, result_tag);
 
-    float query_norm = cblas_sdot(_conf.feature_dim, feature, 1, feature, 1);
+    // 绑定堆更新回调
+    context->attach_heap_callback(filter_heap);
+    // 初始化动态阈值参数
+    context->set_current_radius_rate(_conf.base_radius_rate); // 初始化参数
+	// float dynamic_radius_rate = _conf.base_radius_rate;
 
     auto* visited_list = context->get_visited_list();
     visited_list->reset();
@@ -436,12 +479,32 @@ int MultiBriefPuckIndex::search_nearest_filter_points(
 
     for (uint32_t l = 0; l < true_coarse_cnt; ++l) {
         int coarse_id = coarse_tag[l];
+
+        // 每处理5个粗聚类更新一次阈值
+        if (l % 5 == 0) {
+            float new_rate = compute_dynamic_radius_rate(context);
+            context->set_current_radius_rate(new_rate);
+        }
+
         //计算query与当前一级聚类中心下cell的距离
         FineCluster* cur_fine_cluster_list = _coarse_clusters[coarse_id].fine_cell_list;
+        float dynamic_rate = context->get_current_radius_rate();  // 线程安全获取
+        float pivot = (filter_heap.get_top_addr()[0] - query_norm) / (2.0 * dynamic_rate);
+
         float min_dist = _coarse_clusters[coarse_id].min_dist_offset + coarse_distance[l];
         float max_stationary_dist = pivot - coarse_distance[l] - search_cell_data.fine_distance[0];
 
         for (uint32_t idx = 0; idx < _conf.fine_cluster_count; ++idx) {
+
+          // [ADD] 每处理50个细聚类更新一次阈值
+            if (idx % 50 == 0) {
+                float new_rate = compute_dynamic_radius_rate(context);
+                context->set_current_radius_rate(new_rate);
+                dynamic_rate = context->get_current_radius_rate();  // 重新获取最新值
+                pivot = (filter_heap.get_top_addr()[0] - query_norm) / (2.0 * dynamic_rate);
+            }
+
+
             uint32_t k = search_cell_data.fine_tag[idx];
             int cell_id = coarse_id * _conf.fine_cluster_count + k;
 
@@ -466,7 +529,8 @@ int MultiBriefPuckIndex::search_nearest_filter_points(
                     context, cell_point_start[cell_id], temp_dist, filter_heap);
 
             if (updated_cnt > 0) {
-                pivot = (filter_heap.get_top_addr()[0] - query_norm) / _conf.radius_rate / 2.0;
+              pivot = (filter_heap.get_top_addr()[0] - query_norm) / dynamic_radius_rate / 2.0;
+                //pivot = (filter_heap.get_top_addr()[0] - query_norm) / _conf.radius_rate / 2.0;
             }
 
             max_stationary_dist = std::min(

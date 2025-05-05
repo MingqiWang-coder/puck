@@ -24,10 +24,21 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <functional>
+#include <vector>
 namespace puck {
 class MaxHeap {
 public:
     MaxHeap(const uint32_t size, float* val, uint32_t* tag);
+
+    // 定义回调类型（旧值, 新值）
+    using UpdateCallback = std::function<void(float old_val, float new_val)>;
+
+    // 设置回调函数
+    void set_update_callback(UpdateCallback cb) {
+        _callback = std::move(cb);
+    }
+
     ~MaxHeap() {}
     /*
      * @brief 小于堆顶元素时，需要更新堆
@@ -67,6 +78,9 @@ private:
     uint32_t* _heap_tag;
     uint32_t _default_point_cnt;
     const uint32_t _heap_size;
+
+    UpdateCallback _callback; // 回调函数对象
+
 };
 
 }

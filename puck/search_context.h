@@ -21,9 +21,12 @@
  **/
 #pragma once
 #include <vector>
+#include <chrono>
+#include <mutex>
 #include "puck/index_conf.h"
 #include "puck/index.h"
 #include "puck/puck/multi_brief_puck_index.h"
+#include "puck/hierarchical_cluster/max_heap.h"
 #include "puck/tinker/method/hnsw.h"
 
 namespace puck {
@@ -76,6 +79,42 @@ class SearchContext {
 public:
     SearchContext();
     virtual ~SearchContext();
+
+    void update_statistics(float old_val, float new_val) {
+        std::lock_guard<std::mutex> lock(_stat_mutex);
+        _sum_dist += new_val - old_val;
+        _sum_sq_dist += new_val * new_val - old_val * old_val;
+        _update_count++;
+        _last_update_time = std::chrono::high_resolution_clock::now();
+    }
+
+    struct ThreadSafeStats {
+        float sum_dist;
+        float sum_sq_dist;
+        int update_count;
+        std::chrono::high_resolution_clock::time_point last_update_time;
+    };
+
+    ThreadSafeStats get_thread_safe_stats() {
+        std::lock_guard<std::mutex> lock(_stat_mutex);
+        return {
+            _sum_dist,
+            _sum_sq_dist,
+            _update_count,
+            _last_update_time
+        };
+    }
+
+    // 动态阈值参数访问
+    float get_current_radius_rate() const {
+        std::lock_guard<std::mutex> lock(_param_mutex);
+        return _current_radius_rate;
+    }
+
+    void set_current_radius_rate(float rate) {
+        std::lock_guard<std::mutex> lock(_param_mutex);
+        _current_radius_rate = rate;
+    }
 
     uint64_t get_logid() {
         return _logid;
@@ -132,6 +171,9 @@ public:
     similarity::VisitedList* get_visited_list(){
         return _visited_list;
     }
+
+    void attach_heap_callback(MaxHeap& heap);
+
 private:
     uint64_t _logid;
     const Request* _request;
@@ -145,6 +187,16 @@ private:
     SearchCellData _search_cell_data;
     SearchPointData _search_point_data;
     //DISALLOW_COPY_AND_ASSIGN(SearchContext);
+
+    // ============= 新增动态阈值相关字段 =============
+    float _sum_dist = 0.0f;          // 堆内距离总和
+    float _sum_sq_dist = 0.0f;       // 堆内距离平方和
+    int _update_count = 0;          // 堆更新次数
+    float _current_radius_rate = 1.0f;     // 当前动态半径率
+    std::chrono::high_resolution_clock::time_point _last_update_time;
+
+    mutable std::mutex _stat_mutex;   // 保护统计字段（_sum_dist等）
+    mutable std::mutex _param_mutex;  // 保护动态参数（_current_radius_rate）
 };
 /*
 inline void SearchContext::log_push(const char* key, const char* fmt, ...) {
