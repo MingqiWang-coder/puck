@@ -14,6 +14,11 @@
 #include "puck/search_context.h"
 namespace puck {
 
+template<class T>
+const T& clamp(const T& v, const T& lo, const T& hi) {
+    return v < lo ? lo : (hi < v ? hi : v);
+}
+
 MultiBriefPuckIndex::MultiBriefPuckIndex() {
     _conf.index_type = IndexType::MULTI_BRIEF_PUCK_INDEX;
 }
@@ -245,7 +250,7 @@ float MultiBriefPuckIndex::compute_dynamic_radius_rate(SearchContext* context) {
     // 限制单次变化幅度
     const float prev_rate = context->get_current_radius_rate();
     const float max_change = prev_rate * conf.max_rate_change;
-    dynamic_rate = std::clamp(
+    dynamic_rate = clamp(
         dynamic_rate,
         prev_rate - max_change,
         prev_rate + max_change
