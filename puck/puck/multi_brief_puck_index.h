@@ -159,7 +159,8 @@ struct PivotUpdater {
     bool initialized = false;
 
     // 传入堆对象以及必要参数，进行自适应 pivot 更新
-    float update(const MaxHeap& filter_heap,
+
+    float update(MaxHeap& filter_heap,
                  float query_norm,
                  float radius_rate) {
 
