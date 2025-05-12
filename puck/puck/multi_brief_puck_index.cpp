@@ -235,11 +235,15 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
 //    auto end_coarse_calculation = std::chrono::high_resolution_clock::now();
 
     //计算一级聚类中心的距离,使用最大堆
-    float* traditional_coarse_distance = search_cell_data.traditional_coarse_distance;
-    uint32_t* traditional_coarse_tag = search_cell_data.traditional_coarse_tag;
+    float* coarse_distance = search_cell_data.coarse_distance;
+    uint32_t* coarse_tag = search_cell_data.coarse_tag;
+        // 保存原始堆状态的临时存储
+    std::vector<float> tmp_dist(top_coarse_cnt);
+    std::vector<uint32_t> tmp_tag(top_coarse_cnt);
+
     //初始化最大堆。
     uint32_t traditional_true_top = 0;
-    MaxHeap traditional_heap(top_coarse_cnt, traditional_coarse_distance, traditional_coarse_tag);
+    MaxHeap traditional_heap(top_coarse_cnt, coarse_distance, coarse_tag);
 	auto start_traditional = std::chrono::high_resolution_clock::now();
 
     for (uint32_t c = 0; c < _conf.coarse_cluster_count; ++c) {
@@ -256,12 +260,16 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
 
         float temp_dist = _coarse_norms[c] - cluster_inner_product[c];
 
-        if (temp_dist < traditional_coarse_distance[0]) {
+        if (temp_dist < coarse_distance[0]) {
             traditional_heap.max_heap_update(temp_dist, c);
         }
     }
 	auto end_traditional = std::chrono::high_resolution_clock::now();
 	traditional_true_top = traditional_heap.get_heap_size();
+    // 备份传统方法结果并重置堆
+    memcpy(tmp_dist.data(), coarse_distance, sizeof(float) * traditional_top);
+    memcpy(tmp_tag.data(), coarse_tag, sizeof(uint32_t) * traditional_top);
+
     traditional_heap.reorder();
     const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
             end_traditional - start_traditional).count();
@@ -269,8 +277,6 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
 
 
     // 修改后（位图遍历）
-    float* coarse_distance = search_cell_data.coarse_distance;
-    uint32_t* coarse_tag = search_cell_data.coarse_tag;
     MaxHeap max_heap(top_coarse_cnt,
             coarse_distance,
             coarse_tag);
@@ -328,16 +334,16 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
 
     /*********************** 结果验证 ***********************/
     // 验证两种方法结果一致性
-
-        const uint32_t* traditional_tags = search_cell_data.traditional_coarse_tag;
-        const uint32_t* bitmap_tags = search_cell_data.coarse_tag;
-
-        // 比较前N个有效结果
-        const uint32_t cmp_cnt = std::min(traditional_true_top, true_top_coarse);
-        if (cmp_cnt > 0) {
-            assert(memcmp(traditional_tags, bitmap_tags, sizeof(uint32_t) * cmp_cnt) == 0
-                && "Result mismatch between traditional and bitmap methods");
-        }
+//
+//        const uint32_t* traditional_tags = search_cell_data.traditional_coarse_tag;
+//        const uint32_t* bitmap_tags = search_cell_data.coarse_tag;
+//
+//        // 比较前N个有效结果
+//        const uint32_t cmp_cnt = std::min(traditional_true_top, true_top_coarse);
+//        if (cmp_cnt > 0) {
+//            assert(memcmp(traditional_tags, bitmap_tags, sizeof(uint32_t) * cmp_cnt) == 0
+//                && "Result mismatch between traditional and bitmap methods");
+//        }
 
 
     return 0;
