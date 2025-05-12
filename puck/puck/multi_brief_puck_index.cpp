@@ -357,7 +357,9 @@ int MultiBriefPuckIndex::search_nearest_filter_points(
                     context, cell_point_start[cell_id], temp_dist, filter_heap);
 
             if (updated_cnt > 0) {
-                pivot = (filter_heap.get_top_addr()[0] - query_norm) / _conf.radius_rate / 2.0;
+//                pivot = (filter_heap.get_top_addr()[0] - query_norm) / _conf.radius_rate / 2.0;
+                PivotUpdater pivot_updater;
+                pivot = pivot_updater.update(filter_heap, query_norm, _conf.radius_rate);
             }
 
             max_stationary_dist = std::min(
