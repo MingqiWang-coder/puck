@@ -15,6 +15,7 @@
 #include <fstream>
 #include <stdlib.h>
 #include "puck/puck/puck_index.h"
+#include "puck/hierarchical_cluster/max_heap.h"
 
 namespace puck {
 
@@ -172,8 +173,8 @@ struct PivotUpdater {
         float min_heap_dist = heap_vals[0];
 
         for (size_t i = 1; i < heap_size; ++i) {
-            max_heap_dist = std::max(max_heap_dist, heap_vals[i]);
-            min_heap_dist = std::min(min_heap_dist, heap_vals[i]);
+            if(min_heap_dist > heap_vals[i])
+                min_heap_dist = heap_vals[i];
         }
 
         // 原始计算
