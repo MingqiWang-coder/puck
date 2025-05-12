@@ -267,8 +267,8 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
 	auto end_traditional = std::chrono::high_resolution_clock::now();
 	traditional_true_top = traditional_heap.get_heap_size();
     // 备份传统方法结果并重置堆
-    memcpy(tmp_dist.data(), coarse_distance, sizeof(float) * traditional_top);
-    memcpy(tmp_tag.data(), coarse_tag, sizeof(uint32_t) * traditional_top);
+    memcpy(tmp_dist.data(), coarse_distance, sizeof(float) * traditional_true_top);
+    memcpy(tmp_tag.data(), coarse_tag, sizeof(uint32_t) * traditional_true_top);
 
     traditional_heap.reorder();
     const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
