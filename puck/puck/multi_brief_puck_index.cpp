@@ -12,6 +12,7 @@
 #include "puck/puck/multi_brief_puck_index.h"
 #include "puck/hierarchical_cluster/max_heap.h"
 #include "puck/search_context.h"
+#include <cassert>
 namespace puck {
 
 MultiBriefPuckIndex::MultiBriefPuckIndex() {
