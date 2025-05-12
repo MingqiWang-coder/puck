@@ -32,17 +32,13 @@ void MultiBriefPuckIndex::log_perf_stats() {
     }
 
     // 计算平均值
-    double avg_merge = static_cast<double>(_perf_stats.bitmap_merge_time_us) / total_searches;
-    double avg_traversal = static_cast<double>(_perf_stats.bitmap_traversal_time_us) / total_searches;
-    double avg_total_bitmap = static_cast<double>(_perf_stats.total_bitmap_time_us) / total_searches;
-    double avg_coarse_other = static_cast<double>(_perf_stats.coarse_other_time_us) / total_searches;
+    double avg_traditional = static_cast<double>(_perf_stats.traditional_time_us) / total_searches;
+    double avg_bitmap = static_cast<double>(_perf_stats.total_bitmap_time_us) / total_searches;
 
     // 输出格式化日志
     LOG(INFO) << "[PerfStats] Total Queries: " << total_searches;
-    LOG(INFO) << "[PerfStats] Avg Bitmap Merge Time: " << avg_merge << " μs";
-    LOG(INFO) << "[PerfStats] Avg Bitmap Traversal Time: " << avg_traversal << " μs";
-    LOG(INFO) << "[PerfStats] Avg Total Bitmap Time: " << avg_total_bitmap << " μs";
-    LOG(INFO) << "[PerfStats] Avg Coarse Calculation Time (Matrix etc.): " << avg_coarse_other << " μs";
+    LOG(INFO) << "[PerfStats] Avg Bitmap : " << avg_bitmap << " μs";
+    LOG(INFO) << "[PerfStats] Avg Traditional: " << avg_traditional << " μs";
     _perf_stats = PerfStats();
 }
 
@@ -159,17 +155,17 @@ int MultiBriefPuckIndex::convert_local_to_memory_idx(
            cell_point_indices.data(),
            sizeof(cell_point_indices[0]) * cell_point_indices.size());
 
-//    _briefs_coarse.reset(new bool[brief_count * _conf.coarse_cluster_count]);
-//    memset(_briefs_coarse.get(), 0, sizeof(bool) * brief_count * _conf.coarse_cluster_count);
-//
-//    for (size_t j = 0; j < _conf.total_point_count; ++j) {
-//        int coarse_id = cell_assign[j] / _conf.fine_cluster_count;
-//
-//        for (size_t i = _briefs_indptr[j]; i < _briefs_indptr[j + 1]; ++i) {
-//            int brief_id = _briefs_indices[i];
-//            _briefs_coarse[brief_id * _conf.coarse_cluster_count + coarse_id] = true;
-//        }
-//    }
+    _briefs_coarse.reset(new bool[brief_count * _conf.coarse_cluster_count]);
+    memset(_briefs_coarse.get(), 0, sizeof(bool) * brief_count * _conf.coarse_cluster_count);
+
+    for (size_t j = 0; j < _conf.total_point_count; ++j) {
+        int coarse_id = cell_assign[j] / _conf.fine_cluster_count;
+
+        for (size_t i = _briefs_indptr[j]; i < _briefs_indptr[j + 1]; ++i) {
+            int brief_id = _briefs_indices[i];
+            _briefs_coarse[brief_id * _conf.coarse_cluster_count + coarse_id] = true;
+        }
+    }
 
     const uint32_t bits_per_block = 64;
     const uint32_t num_blocks = (_conf.coarse_cluster_count + bits_per_block - 1) / bits_per_block;
@@ -220,11 +216,12 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
         const float* feature,
         const uint32_t top_coarse_cnt,
         uint32_t& true_top_coarse) {
+    using namespace std::chrono;
     const BriefRequest* request = dynamic_cast<const BriefRequest*>(context->get_request());
 
     SearchCellData& search_cell_data = context->get_search_cell_data();
     float* cluster_inner_product = search_cell_data.cluster_inner_product;
-    auto start_coarse_calculation = std::chrono::high_resolution_clock::now();
+//    auto start_coarse_calculation = std::chrono::high_resolution_clock::now();
     matrix_multiplication(
             _coarse_vocab,
             feature,
@@ -234,38 +231,51 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
             "TN",
             cluster_inner_product);
 
-    auto end_coarse_calculation = std::chrono::high_resolution_clock::now();
+//    auto end_coarse_calculation = std::chrono::high_resolution_clock::now();
 
     //计算一级聚类中心的距离,使用最大堆
-    float* coarse_distance = search_cell_data.coarse_distance;
-    uint32_t* coarse_tag = search_cell_data.coarse_tag;
+    float* traditional_coarse_distance = search_cell_data.traditional_coarse_distance;
+    uint32_t* traditional_coarse_tag = search_cell_data.traditional_coarse_tag;
     //初始化最大堆。
-    MaxHeap max_heap(top_coarse_cnt, coarse_distance, coarse_tag);
+    uint32_t traditional_true_top = 0;
+    MaxHeap traditional_heap(top_coarse_cnt, traditional_coarse_distance, traditional_coarse_tag);
+	auto start_traditional = std::chrono::high_resolution_clock::now();
 
-//    for (uint32_t c = 0; c < _conf.coarse_cluster_count; ++c) {
-//        if (!_briefs_coarse[request->briefs[0] * _conf.coarse_cluster_count + c]) {
-//            // LOG(INFO)<<request->briefs[0]<<" "<<c<<" skip";
-//            continue;
-//        }
-//
-//        if (request->brief_size == 2 &&
-//            !_briefs_coarse[request->briefs[1] * _conf.coarse_cluster_count + c]) {
-//            // LOG(INFO)<<request->briefs[0]<<" "<<c<<" skip";
-//            continue;
-//        }
-//
-//        float temp_dist = _coarse_norms[c] - cluster_inner_product[c];
-//
-//        if (temp_dist < coarse_distance[0]) {
-//            max_heap.max_heap_update(temp_dist, c);
-//        }
-//    }
+    for (uint32_t c = 0; c < _conf.coarse_cluster_count; ++c) {
+        if (!_briefs_coarse[request->briefs[0] * _conf.coarse_cluster_count + c]) {
+            // LOG(INFO)<<request->briefs[0]<<" "<<c<<" skip";
+            continue;
+        }
+
+        if (request->brief_size == 2 &&
+            !_briefs_coarse[request->briefs[1] * _conf.coarse_cluster_count + c]) {
+            // LOG(INFO)<<request->briefs[0]<<" "<<c<<" skip";
+            continue;
+        }
+
+        float temp_dist = _coarse_norms[c] - cluster_inner_product[c];
+
+        if (temp_dist < traditional_coarse_distance[0]) {
+            traditional_heap.max_heap_update(temp_dist, c);
+        }
+    }
+	auto end_traditional = std::chrono::high_resolution_clock::now();
+	traditional_true_top = traditional_heap.get_heap_size();
+    traditional_heap.reorder();
+    const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+            end_traditional - start_traditional).count();
+    _perf_stats.traditional_time_us.fetch_add(duration,std::memory_order_relaxed);
+
 
     // 修改后（位图遍历）
+    float* coarse_distance = search_cell_data.coarse_distance;
+    uint32_t* coarse_tag = search_cell_data.coarse_tag;
+    MaxHeap max_heap(top_coarse_cnt,
+            coarse_distance,
+            coarse_tag);
     const uint32_t bits_per_block = 64;
     const uint32_t num_blocks = (_conf.coarse_cluster_count + bits_per_block - 1) / bits_per_block;
 
-    using namespace std::chrono;
     auto start_bitmap = std::chrono::high_resolution_clock::now();
 
     // 合并多Brief条件的位图（按位与）
@@ -278,7 +288,6 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
             combined_bitmask[block] &= current_bitmask[block];
         }
     }
-    auto end_bitmap_merge = std::chrono::high_resolution_clock::now();
 
     // 遍历位图中的有效粗聚类
     for (uint32_t block = 0; block < num_blocks; ++block) {
@@ -302,24 +311,34 @@ int MultiBriefPuckIndex::search_nearest_coarse_cluster(
         }
     }
 
-    auto end_bitmap_traversal = std::chrono::high_resolution_clock::now();
+    auto end_bitmap = std::chrono::high_resolution_clock::now();
     delete[] combined_bitmask; // 释放临时位图
 
-    auto merge_time = duration_cast<microseconds>(end_bitmap_merge - start_bitmap).count();
-    auto traversal_time = duration_cast<microseconds>(end_bitmap_traversal - end_bitmap_merge).count();
-    auto total_bitmap_time = merge_time + traversal_time;
+    auto total_bitmap_time = duration_cast<microseconds>(end_bitmap - start_bitmap).count();
 
     // 原子操作更新统计
-    _perf_stats.bitmap_merge_time_us.fetch_add(merge_time, std::memory_order_relaxed);
-    _perf_stats.bitmap_traversal_time_us.fetch_add(traversal_time, std::memory_order_relaxed);
     _perf_stats.total_bitmap_time_us.fetch_add(total_bitmap_time, std::memory_order_relaxed);
-    auto coarse_calculation_time = duration_cast<microseconds>(end_coarse_calculation - start_coarse_calculation).count();
-    _perf_stats.coarse_other_time_us.fetch_add(coarse_calculation_time, std::memory_order_relaxed);
+
     _perf_stats.total_searches.fetch_add(1, std::memory_order_relaxed);
 
     true_top_coarse = max_heap.get_heap_size();
     //堆排序
     max_heap.reorder();
+
+    /*********************** 结果验证 ***********************/
+    // 验证两种方法结果一致性
+
+        const uint32_t* traditional_tags = search_cell_data.traditional_coarse_tag;
+        const uint32_t* bitmap_tags = search_cell_data.coarse_tag;
+
+        // 比较前N个有效结果
+        const uint32_t cmp_cnt = std::min(traditional_true_top, true_top_coarse);
+        if (cmp_cnt > 0) {
+            assert(memcmp(traditional_tags, bitmap_tags, sizeof(uint32_t) * cmp_cnt) == 0
+                && "Result mismatch between traditional and bitmap methods");
+        }
+
+
     return 0;
 }
 

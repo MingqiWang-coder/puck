@@ -37,6 +37,10 @@ struct SearchCellData {
     float* cluster_inner_product;       //query与聚类中心的内积,长度=max(coarse_cluster_count, fine_cluster_count)
     float* coarse_distance;             //query与一级聚类中心的距离，和coarse_tag一起在最大堆调整时使用,长度=search_coarse_count
     uint32_t* coarse_tag;              //与query距离最近的一级聚类中心的id,长度=search_coarse_count
+    // 新增传统方法独立缓冲区
+    float* traditional_coarse_distance;
+    uint32_t* traditional_coarse_tag;
+
     float* fine_distance;
     uint32_t* fine_tag;
     DistanceInfo cell_distance;

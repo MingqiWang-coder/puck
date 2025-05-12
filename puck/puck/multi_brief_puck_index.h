@@ -21,19 +21,20 @@ namespace puck {
 
 struct PerfStats {
     std::atomic<uint64_t> total_searches{0};              // 总查询次数
-    std::atomic<uint64_t> bitmap_merge_time_us{0};        // 位图合并总耗时（微秒）
-    std::atomic<uint64_t> bitmap_traversal_time_us{0};    // 位图遍历总耗时
+//    std::atomic<uint64_t> bitmap_merge_time_us{0};        // 位图合并总耗时（微秒）
+//    std::atomic<uint64_t> bitmap_traversal_time_us{0};    // 位图遍历总耗时
     std::atomic<uint64_t> total_bitmap_time_us{0};        // 位图操作总耗时（合并+遍历）
-
+	std::atomic<uint64_t> traditional_time_us{0}; // 新增传统方法耗时统计
     // 新增：粗聚类阶段其他耗时（用于对比优化收益）
-    std::atomic<uint64_t> coarse_other_time_us{0};
+//    std::atomic<uint64_t> coarse_other_time_us{0};
 
     PerfStats& operator=(const PerfStats& other) {
         total_searches.store(other.total_searches.load());
-        bitmap_merge_time_us.store(other.bitmap_merge_time_us.load());
-        bitmap_traversal_time_us.store(other.bitmap_traversal_time_us.load());
+//        bitmap_merge_time_us.store(other.bitmap_merge_time_us.load());
+//        bitmap_traversal_time_us.store(other.bitmap_traversal_time_us.load());
         total_bitmap_time_us.store(other.total_bitmap_time_us.load());
-        coarse_other_time_us.store(other.coarse_other_time_us.load());
+        traditional_time_us.store(other.traditional_time_us.load());
+//        coarse_other_time_us.store(other.coarse_other_time_us.load());
         return *this;
     }
 };
@@ -96,7 +97,7 @@ private:
     std::unique_ptr<int32_t[]> _briefs_indptr;
     std::unique_ptr<int32_t[]> _briefs_indices;
     //标记coase下样本与的brief信息
-//    std::unique_ptr<bool[]> _briefs_coarse;
+    std::unique_ptr<bool[]> _briefs_coarse;
     std::vector<uint64_t*> _briefs_coarse_bitmask; // 使用uint64_t数组存储位图
     //每个brief下，样本在的cell ids
     std::unique_ptr<int32_t[]> _briefs_cell_indptr;
