@@ -52,6 +52,8 @@ struct SearchCellData {
         cluster_inner_product = nullptr;
         coarse_distance = nullptr;
         coarse_tag = nullptr;
+        traditional_coarse_distance = nullptr;
+        traditional_coarse_tag = nullptr;
         fine_distance = nullptr;
         fine_tag = nullptr;
     }
