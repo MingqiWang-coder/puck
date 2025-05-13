@@ -154,35 +154,38 @@ struct BriefRequest : public  Request {
 };
 
     struct PivotUpdater {
-        // 自适应参数配置
-        float alpha_base = 0.2f;
-        float alpha_decay = 0.95f;
+        // 配置参数（建议调优）
+        float alpha_base = 0.25f;      // 初始 alpha 值
+        float alpha_decay_1 = 0.20f;   // 第一次衰减
+        float alpha_decay_2 = 0.15f;   // 第二次衰减
+        float alpha_min = 0.10f;       // 最低 alpha
 
-        // 运行时状态
         float previous_pivot = 0.0f;
         int update_count = 0;
 
+        // 线性分段 alpha 函数（替代 pow）
+        float get_alpha() const {
+            if (update_count < 10) return alpha_base;
+            else if (update_count < 20) return alpha_decay_1;
+            else if (update_count < 30) return alpha_decay_2;
+            else return alpha_min;
+        }
+
         float update(MaxHeap& filter_heap, float query_norm, float radius_rate) {
-            const float* heap_vals = filter_heap.get_top_addr();
-            const float heap_top = heap_vals[0];
+            const float heap_top = filter_heap.get_top_addr()[0];
 
-            // 1. 计算动态 alpha（随更新次数指数衰减）
-            float alpha = alpha_base * std::pow(alpha_decay, update_count / 10.0f);
-            alpha = clamp(alpha, 0.05f, 0.3f); // 限制 alpha 范围
+            float base_pivot = heap_top / (2.0f * radius_rate);
+            float alpha = get_alpha();
 
-            // 2. 计算基础 pivot（与原始公式一致）
-            float base_pivot = heap_top / (2 * radius_rate);
+            float smoothed_pivot = alpha * base_pivot + (1.0f - alpha) * previous_pivot;
 
-            // 3. 平滑更新（EMA 滤波）
-            float smoothed_pivot = alpha * base_pivot + (1 - alpha) * previous_pivot;
-
-            // 状态更新
             previous_pivot = smoothed_pivot;
             ++update_count;
 
             return smoothed_pivot;
         }
     };
+
 
 
 
