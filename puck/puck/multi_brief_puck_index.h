@@ -19,6 +19,11 @@
 
 namespace puck {
 
+template <typename T>
+T clamp(const T& v, const T& lo, const T& hi) {
+      return (v < lo) ? lo : (v > hi) ? hi : v;
+    }
+
 //内存索引结构
 class MultiBriefPuckIndex : public puck::PuckIndex {
 public:
@@ -192,7 +197,7 @@ struct PivotUpdater {
 
         // 3. 动态步长计算（基于堆顶变化率）
         float delta = (previous_top - heap_top) / std::abs(previous_top);
-        float dynamic_step = std::clamp(
+        float dynamic_step = clamp(
             min_step_size + delta * max_step_size,
             min_step_size,
             max_step_size
