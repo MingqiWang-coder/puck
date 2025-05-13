@@ -154,16 +154,21 @@ struct BriefRequest : public  Request {
 };
 
     struct PivotUpdater {
-        // 配置参数（建议调优）
-        float alpha_base = 0.25f;      // 初始 alpha 值
-        float alpha_decay_1 = 0.20f;   // 第一次衰减
-        float alpha_decay_2 = 0.15f;   // 第二次衰减
-        float alpha_min = 0.10f;       // 最低 alpha
+        // 配置参数
+        float alpha_base = 0.25f;
+        float alpha_decay_1 = 0.20f;
+        float alpha_decay_2 = 0.15f;
+        float alpha_min = 0.10f;
 
         float previous_pivot = 0.0f;
+        float previous_top = -1.0f;           // 初始值设为非法值，首次必更新
         int update_count = 0;
 
-        // 线性分段 alpha 函数（替代 pow）
+        // 更新控制参数
+        int update_stride = 4;                // 每 4 次更新一次
+        float top_change_threshold = 0.003f;  // 堆顶变化阈值（相对比例）
+
+        // 分段 alpha 函数
         float get_alpha() const {
             if (update_count < 10) return alpha_base;
             else if (update_count < 20) return alpha_decay_1;
@@ -174,15 +179,25 @@ struct BriefRequest : public  Request {
         float update(MaxHeap& filter_heap, float query_norm, float radius_rate) {
             const float heap_top = filter_heap.get_top_addr()[0];
 
-            float base_pivot = heap_top / (2.0f * radius_rate);
-            float alpha = get_alpha();
+            // 仅在变化显著 且 满足步长更新频率时进行更新
+            bool top_changed = (previous_top < 0.0f) ||
+                               (std::abs(heap_top - previous_top) / std::max(previous_top, 1e-6f) > top_change_threshold);
+            bool allow_update = (update_count % update_stride == 0);
 
-            float smoothed_pivot = alpha * base_pivot + (1.0f - alpha) * previous_pivot;
+            float result_pivot;
+            if (top_changed && allow_update) {
+                float base_pivot = heap_top / (2.0f * radius_rate);
+                float alpha = get_alpha();
+                result_pivot = alpha * base_pivot + (1.0f - alpha) * previous_pivot;
 
-            previous_pivot = smoothed_pivot;
+                previous_pivot = result_pivot;
+                previous_top = heap_top;
+            } else {
+                result_pivot = previous_pivot; // 直接复用上次结果
+            }
+
             ++update_count;
-
-            return smoothed_pivot;
+            return result_pivot;
         }
     };
 
