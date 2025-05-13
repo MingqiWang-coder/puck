@@ -149,41 +149,67 @@ struct BriefRequest : public  Request {
 };
 
 // 仿照你的剪枝逻辑，改写为与原搜索流程一致的风格
-    struct PivotUpdater {
-        float alpha = 0.1f;              // 平滑系数
-        float delta_threshold = 0.01f;   // 最小变化阈值
-        float min_step_size = 0.001f;    // 步伐下限
+struct PivotUpdater {
+    // 自适应参数配置
+    float alpha_base = 0.2f;          // 基础平滑系数
+    float alpha_decay = 0.95f;        // 平滑系数衰减率（每10次迭代）
+    float delta_threshold = 0.005f;   // 触发动态步长的变化阈值
+    float max_step_size = 0.05f;      // 步长上限
+    float min_step_size = 0.001f;     // 步长下限
 
-        float previous_pivot = 0.0f;     // 初始 pivot
-        bool initialized = false;
+    // 运行时状态
+    float previous_pivot = 0.0f;
+    float previous_top = 0.0f;
+    int update_count = 0;             // 更新计数器
+    bool use_aggressive_phase = true; // 初始激进阶段标识
 
-        float update(MaxHeap& filter_heap,
-                     float query_norm,   // 保留参数，为了接口统一，内部不再使用
-                     float radius_rate) {
+    float update(MaxHeap& filter_heap, float query_norm, float radius_rate) {
+        const float* heap_vals = filter_heap.get_top_addr();
+        const float heap_top = heap_vals[0];
 
-            const float* heap_vals = filter_heap.get_top_addr();
-            size_t heap_size = filter_heap.get_heap_size();
-
-            float heap_top_dist = heap_vals[0];
-
-            // 快速估计新 pivot（仅用 top，去除 min/max 遍历）
-            float new_pivot = (heap_top_dist) / radius_rate / 2.0f;
-
-            if (!initialized) {
-                previous_pivot = new_pivot;
-                initialized = true;
-                return new_pivot;
+        // 第一阶段：激进剪枝（使用原始方法快速收敛）
+        if (use_aggressive_phase) {
+            if (update_count < 5) { // 前5次更新保持激进
+                previous_pivot = (heap_top) / (2 * radius_rate);
+                previous_top = heap_top;
+                ++update_count;
+                return previous_pivot;
+            } else {
+                use_aggressive_phase = false; // 切换至平滑阶段
             }
-
-
-            // 平滑更新 + 固定步长微调
-            float smoothed_pivot = alpha * new_pivot + (1 - alpha) * previous_pivot;
-            smoothed_pivot += min_step_size;  // 类似动态推进剪枝前沿
-
-            previous_pivot = smoothed_pivot;
-            return smoothed_pivot;
         }
-    };
+
+        // 第二阶段：自适应平滑策略
+        // 1. 计算动态alpha（随更新次数衰减）
+        float alpha = alpha_base * std::pow(alpha_decay, update_count/10.0f);
+        alpha = std::clamp(alpha, 0.05f, 0.3f); // 限制alpha范围
+
+        // 2. 计算基础pivot（带噪声抑制）
+        float base_pivot = (heap_top) / (2 * radius_rate);
+        if (std::abs(heap_top - previous_top) < delta_threshold * previous_top) {
+            base_pivot *= 0.98f; // 当堆顶稳定时略微收紧
+        }
+
+        // 3. 动态步长计算（基于堆顶变化率）
+        float delta = (previous_top - heap_top) / std::abs(previous_top);
+        float dynamic_step = std::clamp(
+            min_step_size + delta * max_step_size,
+            min_step_size,
+            max_step_size
+        );
+
+        // 4. 综合更新
+        float smoothed_pivot = alpha * base_pivot + (1 - alpha) * previous_pivot;
+        smoothed_pivot += dynamic_step; // 添加动态推进
+
+        // 状态更新
+        previous_top = heap_top;
+        previous_pivot = smoothed_pivot;
+        ++update_count;
+
+        return smoothed_pivot;
+    }
+};
 
 
 
