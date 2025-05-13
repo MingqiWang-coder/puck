@@ -187,7 +187,7 @@ struct PivotUpdater {
         // 第二阶段：自适应平滑策略
         // 1. 计算动态alpha（随更新次数衰减）
         float alpha = alpha_base * std::pow(alpha_decay, update_count/10.0f);
-        alpha = std::clamp(alpha, 0.05f, 0.3f); // 限制alpha范围
+        alpha = clamp(alpha, 0.05f, 0.3f); // 限制alpha范围
 
         // 2. 计算基础pivot（带噪声抑制）
         float base_pivot = (heap_top) / (2 * radius_rate);
