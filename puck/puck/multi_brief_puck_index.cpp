@@ -335,7 +335,7 @@ int MultiBriefPuckIndex::search_nearest_filter_points(
         for (uint32_t idx = 0; idx < _conf.fine_cluster_count; ++idx) {
             uint32_t k = search_cell_data.fine_tag[idx];
             int cell_id = coarse_id * _conf.fine_cluster_count + k;
-
+            //你有没有
             if (visited_list->mass[cell_id] != cur_V) {
                 continue;
             }

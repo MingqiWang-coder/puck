@@ -76,7 +76,7 @@ private:
     int compute_quantized_distance(SearchContext* context, const int cell_point_idx,
                                    const float cell_dist, MaxHeap& result_heap);
 private:
-    //memory idx order，point has brief ids
+    //每个point对应的brief信息
     std::unique_ptr<int32_t[]> _briefs_indptr;
     std::unique_ptr<int32_t[]> _briefs_indices;
     //标记coase下样本与的brief信息
@@ -153,68 +153,37 @@ struct BriefRequest : public  Request {
     }
 };
 
-// 仿照你的剪枝逻辑，改写为与原搜索流程一致的风格
-struct PivotUpdater {
-    // 自适应参数配置
-    float alpha_base = 0.2f;          // 基础平滑系数
-    float alpha_decay = 0.95f;        // 平滑系数衰减率（每10次迭代）
-    float delta_threshold = 0.005f;   // 触发动态步长的变化阈值
-    float max_step_size = 0.05f;      // 步长上限
-    float min_step_size = 0.001f;     // 步长下限
+    struct PivotUpdater {
+        // 自适应参数配置
+        float alpha_base = 0.2f;
+        float alpha_decay = 0.95f;
 
-    // 运行时状态
-    float previous_pivot = 0.0f;
-    float previous_top = 0.0f;
-    int update_count = 0;             // 更新计数器
-    bool use_aggressive_phase = true; // 初始激进阶段标识
+        // 运行时状态
+        float previous_pivot = 0.0f;
+        int update_count = 0;
 
-    float update(MaxHeap& filter_heap, float query_norm, float radius_rate) {
-        const float* heap_vals = filter_heap.get_top_addr();
-        const float heap_top = heap_vals[0];
+        float update(MaxHeap& filter_heap, float query_norm, float radius_rate) {
+            const float* heap_vals = filter_heap.get_top_addr();
+            const float heap_top = heap_vals[0];
 
-        // 第一阶段：激进剪枝（使用原始方法快速收敛）
-        if (use_aggressive_phase) {
-            if (update_count < 5) { // 前5次更新保持激进
-                previous_pivot = (heap_top) / (2 * radius_rate);
-                previous_top = heap_top;
-                ++update_count;
-                return previous_pivot;
-            } else {
-                use_aggressive_phase = false; // 切换至平滑阶段
-            }
+            // 1. 计算动态 alpha（随更新次数指数衰减）
+            float alpha = alpha_base * std::pow(alpha_decay, update_count / 10.0f);
+            alpha = clamp(alpha, 0.05f, 0.3f); // 限制 alpha 范围
+
+            // 2. 计算基础 pivot（与原始公式一致）
+            float base_pivot = heap_top / (2 * radius_rate);
+
+            // 3. 平滑更新（EMA 滤波）
+            float smoothed_pivot = alpha * base_pivot + (1 - alpha) * previous_pivot;
+
+            // 状态更新
+            previous_pivot = smoothed_pivot;
+            ++update_count;
+
+            return smoothed_pivot;
         }
+    };
 
-        // 第二阶段：自适应平滑策略
-        // 1. 计算动态alpha（随更新次数衰减）
-        float alpha = alpha_base * std::pow(alpha_decay, update_count/10.0f);
-        alpha = clamp(alpha, 0.05f, 0.3f); // 限制alpha范围
-
-        // 2. 计算基础pivot（带噪声抑制）
-        float base_pivot = (heap_top) / (2 * radius_rate);
-        if (std::abs(heap_top - previous_top) < delta_threshold * previous_top) {
-            base_pivot *= 0.98f; // 当堆顶稳定时略微收紧
-        }
-
-        // 3. 动态步长计算（基于堆顶变化率）
-        float delta = (previous_top - heap_top) / std::abs(previous_top);
-        float dynamic_step = clamp(
-            min_step_size + delta * max_step_size,
-            min_step_size,
-            max_step_size
-        );
-
-        // 4. 综合更新
-        float smoothed_pivot = alpha * base_pivot + (1 - alpha) * previous_pivot;
-        smoothed_pivot += dynamic_step; // 添加动态推进
-
-        // 状态更新
-        previous_top = heap_top;
-        previous_pivot = smoothed_pivot;
-        ++update_count;
-
-        return smoothed_pivot;
-    }
-};
 
 
 
