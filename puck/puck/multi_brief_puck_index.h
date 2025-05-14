@@ -171,6 +171,7 @@ struct BriefRequest : public  Request {
             else return alpha_min;
         }
 
+
         float update(MaxHeap& filter_heap, float query_norm, float radius_rate) {
             const float heap_top = filter_heap.get_top_addr()[0];
 
